@@ -1,20 +1,45 @@
+import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
+from typing import Float
+
 from MLp.conf.config_functions import get_config
 mlp_config = get_config()
 RANDOM_STATE = mlp_config['MLP_CONFIG']['RANDOM_STATE']
-
 from MLp.src.preprocessing.transformer_decorators import get_num_cat_features_decorator, select_columns_decorator
-
 from MLp.src.secondary_modules.import_libraries import import_cpu_gpu_sklearn
-BaseEstimator, TransformerMixin = import_cpu_gpu_sklearn('base', ['BaseEstimator', 'TransformerMixin'])
+
 IsolationForest = import_cpu_gpu_sklearn('ensemble', 'IsolationForest')
 
-import numpy as np
-
+'''
+    -- AVAILABLE DATA SAMPLING TRANSFORMER CLASSES (Follow the sklearn nomenclature / Users can also write their own custom transformers and use them in MLp) --
+    
+    DROP NaN VALUES
+    -----------
+    - DropNaTransformer
+    
+    OUTLIER REMOVAL
+    -----------
+    - IQROutliersTransformer
+    - WinsorizerOutliersTransformer
+    - TruncationTransformer
+    - ZScoreOutliersTransformer
+    - IsolationForestOutliersTransformer
+'''
 
 
 
 
 class DropNaTransformer(BaseEstimator, TransformerMixin):
+    """
+    Custom transformer to drop rows with missing values (NaNs) in selected columns.
+
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        List of column names to consider. If None, all columns will be considered.
+
+    """
+
     def __init__(self, columns=None):
         self.columns = columns        
         self.selected_cols = []
@@ -32,8 +57,18 @@ class DropNaTransformer(BaseEstimator, TransformerMixin):
 ############# OUTLIERS ###############################
 
 class IQROutliersTransformer(BaseEstimator, TransformerMixin):
+    """
+    Custom transformer to remove outliers from numerical columns using IQR (Interquartile Range).
+    
+    Parameters:
+    -----------
+    columns : list or None, default=None
+        Columns to apply outlier removal. If None, applies to all numerical columns.
+    IQR_multiplier : float, default=1.5
+        Multiplier to adjust the range for detecting outliers.
+    """
+    
     def __init__(self, columns=None, IQR_multiplier=1.5):
-
         self.columns = columns        
         self.IQR_multiplier = IQR_multiplier
 
@@ -41,7 +76,6 @@ class IQROutliersTransformer(BaseEstimator, TransformerMixin):
         self.lower_bounds_ = {}
         self.upper_bounds_ = {}
 
-    
     @get_num_cat_features_decorator
     @select_columns_decorator
     def fit(self, X, y=None):
@@ -74,12 +108,25 @@ class IQROutliersTransformer(BaseEstimator, TransformerMixin):
         # Return the DataFrame without outliers
         return X[~total_outliers_mask]
         
+        
 
 class WinsorizerOutliersTransformer(BaseEstimator, TransformerMixin):
+    """
+    A transformer to winsorize outliers in numerical columns.
+
+    Parameters:
+    -----------
+    columns : list, optional (default=None)
+        List of column names to apply winsorization. If None, all numerical columns are selected.
+    low_percentile_threshold : int or float, optional (default=5)
+        Lower percentile threshold for winsorization.
+    high_percentile_threshold : int or float, optional (default=95)
+        Upper percentile threshold for winsorization.
+    """
+    
     def __init__(self, columns=None,
                        low_percentile_threshold=5, 
                        high_percentile_threshold=95):
-
         self.columns = columns
         self.low_percentile_threshold = low_percentile_threshold
         self.high_percentile_threshold = high_percentile_threshold
@@ -110,9 +157,31 @@ class WinsorizerOutliersTransformer(BaseEstimator, TransformerMixin):
 
 
 class TruncationTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, columns=None,
-                       low_threshold=None, 
-                       high_threshold=None):
+    """
+    A transformer class for truncating numerical values in specified columns
+    beyond given thresholds.
+
+    Parameters:
+    -----------
+    low_threshold : float
+        Lower threshold for truncation. Values below this threshold will
+        be replaced by `low_threshold`. If None, truncation will not be
+        applied for values below any threshold.
+
+    high_threshold : float
+        Upper threshold for truncation. Values above this threshold will
+        be replaced by `high_threshold`. If None, truncation will not be
+        applied for values above any threshold.
+        
+    columns : list or None, optional (default=None)
+        List of column names to apply truncation. If None, all numerical
+        columns will be considered for truncation.
+    """
+    
+    def __init__(self, low_threshold:Float, 
+                       high_threshold:Float,
+                       columns=None,
+                       ):
 
         self.columns = columns        
         self.low_threshold = low_threshold
@@ -125,7 +194,7 @@ class TruncationTransformer(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         return self
 
-    # Method that replace value higher than high_threshold by high_threshold and lower than low_threshold by low_threshold
+    # Transform the input data by truncating values in selected columns. Replace value higher than high_threshold by high_threshold and lower than low_threshold by low_threshold
     def transform(self, X):
         for col in self.selected_cols:
             # Truncate values beyond the specified thresholds
@@ -142,8 +211,18 @@ class TruncationTransformer(BaseEstimator, TransformerMixin):
 
 
 class ZScoreOutliersTransformer(BaseEstimator, TransformerMixin):
+    """
+    Custom transformer to remove outliers from numerical columns using Z-scores.
+    
+    Parameters:
+    ----------
+    columns : list, optional
+        List of column names to consider. If None, all numerical columns will be considered.
+    threshold : float, optional (default=3)
+        Threshold value for identifying outliers. 
+    """
+    
     def __init__(self, columns=None, threshold=3):
-        
         self.columns = columns        
         self.threshold = threshold
 
@@ -177,6 +256,21 @@ class ZScoreOutliersTransformer(BaseEstimator, TransformerMixin):
     
 
 class IsolationForestOutliersTransformer(BaseEstimator, TransformerMixin):
+    """
+    Custom transformer to remove outliers using Isolation Forest algorithm.
+
+    Parameters:
+    -----------
+    columns : list, default=None
+        List of column names to consider for outlier detection. If None, all columns will be considered.
+        
+    contamination : float, default=0.05
+        The amount of contamination in the data set, i.e., the proportion of outliers in the data set.
+        
+    random_state : int, default=RANDOM_STATE
+        Random seed for reproducibility.
+    """
+    
     def __init__(self, columns=None,
                        contamination=0.05,
                        random_state=RANDOM_STATE):
@@ -195,9 +289,8 @@ class IsolationForestOutliersTransformer(BaseEstimator, TransformerMixin):
         self.isol_forest.fit(X[self.selected_cols])
         return self
 
-    # Return a binary mask indicating whether each sample is an inlier (1) or an outlier (-1)
     def transform(self, X):
-        # Identify outliers using the Isolation Forest
+        # With isolation forest, generate a binary mask indicating whether each sample is an inlier (1) or an outlier (-1)
         outlier_mask = self.isol_forest.predict(X[self.selected_cols]) == -1
         # Remove outliers from X
         X = X[~outlier_mask]

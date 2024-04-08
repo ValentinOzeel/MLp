@@ -3,6 +3,13 @@ import os
 
 
 def set_config(config_key, new_dict_params):
+    '''
+    Modify the YAML config file dynamically in your code.
+    Args: 
+        - config_key (str): the key you want to modify in the YAML config file.
+        - new_dict_params (dict): Dict with updated values. Keys in the YAML file not present in this dictionnary will be left unchanged. 
+    Returns: None
+    '''
     # Load the YAML content from the file
     yaml_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'config.yml'))
     with open(yaml_file_path, 'r') as file:
@@ -23,10 +30,18 @@ def set_config(config_key, new_dict_params):
 
 
 def get_config():
-    # Load the YAML content from the file
+    '''
+    Load the YAML configuration.
+    Args: 
+        None
+    Returns:
+        yaml_content (dict): A dictionary containing the YAML configuration data.
+    '''
+    # Get the absolute path to the YAML file
     yaml_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'config.yml'))
+    # Load the YAML content from the file
     with open(yaml_file_path, 'r') as file:
         yaml_content = yaml.safe_load(file)
 
-        return yaml_content
+    return yaml_content
     

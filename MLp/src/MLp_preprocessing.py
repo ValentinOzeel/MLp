@@ -38,47 +38,6 @@ os.environ["OMP_NUM_THREADS"] = str(get_cpu_count())
 ############################## PREPROCESSING TRANSFORMERS ##############################
 
 
-AVAILABLE_PREPROCESS_TRANSFORMERS = {
-    "drop_cols_transformer": "DropColsTransformer",
-    "drop_na_transformer": "DropNaTransformer",
-    "split_expand_transformer": "SplitExpandTransformer",
-    "num_imputer_transformer": "SimpleNumImputer",
-    "cat_imputer_transformer": "SimpleCatImputer",
-    'knn_imputer_transformer':'KNNImputerTransformer',
-    "oh_encode_transformer": "OHEncodeTransformer",
-    "label_encode_transformer": "LabelEncodeTransformer",
-    'binning_transformer' : 'BinningTransformer',
-    "iqr_outliers_transformer": "IQROutliersTransformer",
-    "winsorizer_outliers_transformer": "WinsorizerOutliersTransformer",
-    "truncation_outliers_transformer": "TruncationTransformer",
-    "zscore_outliers_transformer": "ZScoreOutliersTransformer",
-    'isolation_forest_outliers_transformer':'IsolationForestOutliersTransformer',
-    "minmax_scaler_transformer": "MinMaxScalerTransformer",
-    "standard_scaler_transformer": "StandardScalerTransformer",
-    'robust_scaler_transformer':     'RobustScalerTransformer',
-    'power_yj_scaler_transformer':'PowerYeoJohnsonScalerTransformer',
-    'power_boxcox_scaler_transformer':'PowerBoxCoxScalerTransformer',
-    'quantile_scaler_transformer':'QuantileScalerTransformer',
-    'boxcox_scaler_transformer':'BoxCoxScalerTransformer',
-    'log_scaler_transformer':'LogScalerTransformer',
-    'operation_transformer' : 'OperationTransformer',
-    'round_transformer' : 'RoundTransformer',
-    "pca_transformer": "PCATransformer",
-    "kmeans_clustering_transformer": "KMeansClusteringTransformer",
-    "agglomerative_clustering_transformer": "AgglomerativeClusteringTransformer",
-    "dbscan_clustering_transformer": "DBSCANClusteringTransformer",
-}
-
-
-    
-
-def _get_preprocess_transform (X, preprocess_transformer):
-    # Get the full preprocessed df with preprocessed columns and non preprocessed columns
-    X_preprocessed = preprocess_transformer.fit_transform(X)
-    # Reassign indexing lost during transofrmation
-    X_preprocessed.index = X.index
-    return X_preprocessed, preprocess_transformer
-
 
 class DynamicFeatureTransformer(BaseEstimator, TransformerMixin):
     def __init__(self, transformer,
@@ -108,7 +67,7 @@ class DynamicFeatureTransformer(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         if self._preprocess_transformer:
             # Get process transformer, preprocessed df and preprocessed cols
-            X_preprocessed, self._preprocess_transformer = _get_preprocess_transform(X[self.selected_cols], self._preprocess_transformer)
+            X_preprocessed, self._preprocess_transformer = self._get_preprocess_transform(X[self.selected_cols], self._preprocess_transformer)
             # Fit the model only with the preprocessed columns
             self.transformer.fit(X_preprocessed)
         else:    
@@ -132,6 +91,12 @@ class DynamicFeatureTransformer(BaseEstimator, TransformerMixin):
 
         return pd.concat([X, new_df], axis=1)
 
+    def _get_preprocess_transform (X, preprocess_transformer):
+        # Get the full preprocessed df with preprocessed columns and non preprocessed columns
+        X_preprocessed = preprocess_transformer.fit_transform(X)
+        # Reassign indexing lost during transofrmation
+        X_preprocessed.index = X.index
+        return X_preprocessed, preprocess_transformer
 
     def _validate_parameters(self):
         if self._drop is not None and (self._col_name_prefix is None and self._col_names is None):
@@ -188,7 +153,7 @@ class MLpPreprocessing:
         # Created pipelines
         self.data_pipelines_ = []
 
-    def create_data_pipeline(self, name: str, steps=None, pipeline=None) -> Pipeline:   
+    def create_data_pipeline(self, name: str, steps=None, pipeline=None)->Pipeline:   
         """
         Create or extend a scikit-learn pipeline for data preprocessing.
 

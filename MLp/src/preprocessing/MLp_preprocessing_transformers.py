@@ -1,31 +1,82 @@
 import itertools
+import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
+from typing import Dict 
 
 from MLp.conf.config_functions import get_config
 mlp_config = get_config()
 RANDOM_STATE = mlp_config['MLP_CONFIG']['RANDOM_STATE']
-
 from MLp.src.preprocessing.transformer_decorators import get_num_cat_features_decorator, select_columns_decorator
-
-from sklearn.base import BaseEstimator, TransformerMixin
-
-import numpy as np
-
 from MLp.src.secondary_modules.import_libraries import import_cpu_gpu_sklearn, import_cpu_gpu_pandas
-pd = import_cpu_gpu_pandas()
 
+pd = import_cpu_gpu_pandas()
 SimpleImputer, KNNImputer = import_cpu_gpu_sklearn('impute', ['SimpleImputer', 'KNNImputer'])
-OneHotEncoder, LabelEncoder, StandardScaler, MinMaxScaler, RobustScaler, PowerTransformer, QuantileTransformer = import_cpu_gpu_sklearn('preprocessing', ['OneHotEncoder', 
-                                                                                                                                                             'LabelEncoder', 
-                                                                                                                                                             'StandardScaler', 
-                                                                                                                                                             'MinMaxScaler', 
-                                                                                                                                                             'RobustScaler', 
-                                                                                                                                                             'PowerTransformer', 
-                                                                                                                                                             'QuantileTransformer'])
+OneHotEncoder, LabelEncoder, StandardScaler, MinMaxScaler, RobustScaler, PowerTransformer, QuantileTransformer = import_cpu_gpu_sklearn(
+    'preprocessing', ['OneHotEncoder', 
+                      'LabelEncoder', 
+                      'StandardScaler', 
+                      'MinMaxScaler', 
+                      'RobustScaler', 
+                      'PowerTransformer', 
+                      'QuantileTransformer']
+    )
 KMeans, AgglomerativeClustering, DBSCAN = import_cpu_gpu_sklearn('cluster', ['KMeans', 'AgglomerativeClustering', 'DBSCAN'])
 PCA = import_cpu_gpu_sklearn('decomposition', 'PCA')
 
 
+'''
+    -- AVAILABLE DATA PREPROCESSING TRANSFORMER CLASSES (Follow the sklearn nomenclature / Users can also write their own custom transformers and use them in MLp) --
+    
+    DROP/SPLIT-EXPEND COLUMNS
+    -----------
+    - DropColsTransformer
+    - SplitExpandTransformer
+    
+    IMPUTERS/ENCODERS
+    -----------
+    - SimpleImputerTransformer
+    - KNNImputerTransformer
+    - OHEncodeTransformer
+    - LabelEncodeTransformer
+    
+    BINNING/SCALERS
+    -----------
+    - BinningTransformer
+    - MinMaxScalerTransformer
+    - StandardScalerTransformer
+    - RobustScalerTransformer
+    - PowerYeoJohnsonScalerTransformer
+    - PowerBoxCoxScalerTransformer
+    - QuantileScalerTransformer
+    - BoxCoxScalerTransformer
+    - LogScalerTransformer
+    
+    OPERATIONS/ROUNDING
+    -----------
+    - OperationTransformer
+    - RoundTransformer
+    
+    CLUSTERING/DIMENTIONNAL REDUCTION
+    -----------
+    - PCATransformer
+    - KMeansClusteringTransformer
+    - AgglomerativeClusteringTransformer
+    - DBSCANClusteringTransformer
+
+'''
+
+
+
+
 class DropColsTransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer to drop specified columns from a DataFrame.
+
+    Parameters:
+    ----------
+    columns : list or None, default=None
+        A list of column names to drop from the DataFrame. If None, no columns are dropped.
+    """
     def __init__(self, columns=None):     
         self.columns = columns        
         self.selected_cols = []
@@ -36,14 +87,40 @@ class DropColsTransformer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        if self.selected_cols:
+        if self.columns == None:
+            return X
+        elif self.selected_cols:
             X = X.drop(self.selected_cols, axis=1)
         return X
 
 
 
+
 class SplitExpandTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, columns=None, feature_splits={}):
+    """
+    Transformer for splitting and expanding columns in a pandas DataFrame.
+
+    Parameters:
+    -----------
+    feature_splits : dict
+        Dictionary specifying columns to split and their splitting characteristics. Keys are column names,
+        values can be either a string indicating the splitting character or a list with the splitting character
+        and optional new column names.
+    columns : list, optional
+        List of columns to apply the transformation to. If None, transformation is applied to all columns.
+
+    Raises:
+    -------
+    ValueError
+        If the `feature_splits` parameter is not a dictionary with proper entries.
+
+    Examples:
+    ---------
+    transformer = SplitExpandTransformer(columns=['column1', 'column2'], feature_splits={'column1': '-', 'column2': ['-', ['new_col1', 'new_col2']]})
+    transformed_data = transformer.fit_transform(data)
+    """
+    
+    def __init__(self, feature_splits:Dict, columns=None):
         self.columns = columns
         self.feature_splits = feature_splits
         
@@ -108,28 +185,43 @@ class SplitExpandTransformer(BaseEstimator, TransformerMixin):
                 X = pd.concat([X.drop(feature, axis=1), new_columns], axis=1)
         return X
     
-    
-
-
-
-
 
 
 
 class SimpleImputerTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, columns=None, strategy=None):
+    """
+    A transformer class for imputing (numerical or categorical) missing values in a dataset using SimpleImputer.
+
+    Parameters:
+    -----------
+    strategy : str
+        The imputation strategy to use. Supported strategies: 'mean', 'median', 'most_frequent', 'constant'.
+        
+        
+    columns : list or None, optional (default=None)
+        List of column names to apply the imputation. If None, all columns will be considered.
+
+    missing_values : int, float, str, None, optional (default=np.nan)
+        The placeholder for the missing values.
+
+    fill_value : int, float, str, None; Optional (default=None)
+        When strategy='constant', fill_value is used to replace missing values.
+    """
+    
+    def __init__(self, strategy:str, columns=None, missing_values=np.nan, fill_value=None):
         self.columns = columns        
         self.strategy = strategy
+        self.missing_values = missing_values
+        self.fill_value = fill_value
         
         self.selected_cols = []
         self.imputer = None
 
-    
     @get_num_cat_features_decorator
     @select_columns_decorator
     def fit(self, X, y=None):
         # Create SimpleImputer with selected strategy
-        self.imputer = SimpleImputer(strategy=self.strategy)
+        self.imputer = SimpleImputer(missing_values=self.missing_values, strategy=self.strategy, fill_value=self.fill_value)
         # Fit SimpleImputer on the training data
         self.imputer.fit(X[self.selected_cols])
         return self
@@ -146,9 +238,22 @@ class SimpleImputerTransformer(BaseEstimator, TransformerMixin):
         return X
 
 
+
+
 class KNNImputerTransformer(BaseEstimator, TransformerMixin):
+    """
+    Custom transformer for imputing missing values using K-Nearest Neighbors (KNN).
+    
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        Columns to apply the KNN imputation. If None, applies to all numerical columns.
+    
+    n_neighbors : int, optional (default=5)
+        Number of neighboring samples to use for imputation.
+    """
+    
     def __init__(self, columns=None, n_neighbors=5):
-        
         self.columns = columns        
         self.n_neighbors = n_neighbors
         
@@ -178,9 +283,24 @@ class KNNImputerTransformer(BaseEstimator, TransformerMixin):
 
     
     
-    
 
 class OHEncodeTransformer(BaseEstimator, TransformerMixin):
+    """One-Hot Encoding Transformer.
+
+    This transformer performs one-hot encoding on categorical features with less than a specified
+    maximum cardinality. It fits a OneHotEncoder to the selected features during the fit phase
+    and transforms the input data accordingly.
+
+    Parameters:
+    -----------
+        columns (list or None): List of column names to encode. If None, all columns are considered.
+        max_cardinality (int): Maximum number of unique values a column can have to be considered
+                               for one-hot encoding.
+        handle_unknown (str): How to handle unknown categories during encoding. Options are "ignore"
+                              or "error".
+        sparse_output (bool): Whether to return a sparse matrix from the encoder.
+    """
+
     def __init__(self, columns=None,
                        max_cardinality=15,
                        handle_unknown="ignore",
@@ -230,10 +350,19 @@ class OHEncodeTransformer(BaseEstimator, TransformerMixin):
 
 
 
-
 class LabelEncodeTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, columns=None, min_cardinality=15):
+    """
+    Transformer for label encoding categorical features in a DataFrame.
+
+    Parameters:
+    -----------
+    columns : list or None, default=None
+        Columns to encode. If None, all categorical columns will be encoded.
+    min_cardinality : int, default=15
+        Minimum cardinality of a column to be considered for encoding.
+    """
     
+    def __init__(self, columns=None, min_cardinality=15):
         self.columns = columns        
         self.min_cardinality = min_cardinality
         
@@ -241,7 +370,6 @@ class LabelEncodeTransformer(BaseEstimator, TransformerMixin):
         self.label_encoders = {}
         self.label_encoded_cols = []
 
-    
     @get_num_cat_features_decorator
     @select_columns_decorator
     def fit(self, X, y=None):
@@ -280,13 +408,32 @@ class LabelEncodeTransformer(BaseEstimator, TransformerMixin):
 
 
 
-
 class BinningTransformer(BaseEstimator, TransformerMixin):
-    
     '''
-    custom_binning should be in the form : 
-    {'labels':[],
-    'bins':[]}
+    Custom Transformer for binning numerical features.
+
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        List of column names to apply binning transformation. If None, all numerical columns will be selected.
+        
+    equal_frequency_binning : bool, optional (default=False)
+        If True, perform binning based on equal frequency.
+        
+    equal_width_binning : bool, optional (default=False)
+        If True, perform binning based on equal width.
+        
+    n_groups : int or None, optional (default=None)
+        Number of bins to create for equal frequency or equal width binning.
+        
+    custom_binning : dict, optional (default={})
+        Custom binning configuration. Should be in the form {'labels':[], 'bins':[]}.
+        
+    bins_as_numerical : bool, optional (default=False)
+        If True, encode bin labels as numerical values.
+        
+    drop : bool, optional (default=False)
+        If True, drop original columns after transformation.
     '''
     
     def __init__(self, columns=None,
@@ -349,9 +496,22 @@ class BinningTransformer(BaseEstimator, TransformerMixin):
     
     
     
+    
 class MinMaxScalerTransformer(BaseEstimator, TransformerMixin):
+    """
+    Custom transformer to apply Min-Max scaling to numerical columns in a pandas DataFrame.
+    
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        List of column names to apply Min-Max scaling. If None, all numerical columns are selected.
+    
+    preprocess_ : bool, optional (default=False)
+        Flag indicating whether this scaling is a preprocessing step of another transformer. 
+        (e.g before applying PCA or clustering methods although StandardScaler just below is prefered for that)
+    """
+    
     def __init__(self, columns=None, preprocess_=False):
-        
         self.columns=columns        
         self.preprocess_=preprocess_
 
@@ -382,8 +542,18 @@ class MinMaxScalerTransformer(BaseEstimator, TransformerMixin):
     
     
 class StandardScalerTransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer that standardizes numerical features using StandardScaler.
+
+    Parameters:
+    ----------
+    columns : list or None, default=None
+        List of columns to standardize. If None, all numerical columns will be standardized.
+    
+    preprocess_ : bool, optional (default=False)
+        Flag indicating whether this scaling is a preprocessing step of another transformer (e.g before applying PCA or clustering methods)
+    """
     def __init__(self, columns=None, preprocess_=False):
- 
         self.columns=columns
         self.preprocess_=preprocess_
                        
@@ -413,16 +583,23 @@ class StandardScalerTransformer(BaseEstimator, TransformerMixin):
 
     
 
-#This scaler is robust to outliers as it scales data based on the interquartile range (IQR)
 class RobustScalerTransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer to scale numerical features using RobustScaler (robust to outliers).
+    
+    Parameters:
+    ----------
+    columns : list or None, default=None
+        List of column names to scale. If None, all numerical columns will be scaled.
+    preprocess_ : bool, optional (default=False)
+        Flag indicating whether this scaling is a preprocessing step of another transformer (e.g before applying PCA or clustering methods)
+    """
     def __init__(self, columns=None, preprocess_=False):
-        
         self.columns = columns
         self.preprocess_ = preprocess_
 
         self.selected_cols = [] 
         self.robust_scaler = None
-        self.transformed = []
     
     @get_num_cat_features_decorator
     @select_columns_decorator  
@@ -446,13 +623,19 @@ class RobustScalerTransformer(BaseEstimator, TransformerMixin):
     
     
     
-    
-    
-
 
 class PowerBoxCoxScalerTransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer to perform power transformation (Box-Cox) on numerical columns.
+    
+    Parameters:
+    -----------
+    columns : list or None, default=None
+        List of column names to transform. If None, all numerical columns will be transformed.
+    preprocess_ : bool, optional (default=False)
+        Flag indicating whether this scaling is a preprocessing step of another transformer (e.g before applying PCA or clustering methods)
+    """
     def __init__(self, columns=None, preprocess_=False):
-        
         self.columns = columns
         self.preprocess_ = preprocess_
 
@@ -484,8 +667,17 @@ class PowerBoxCoxScalerTransformer(BaseEstimator, TransformerMixin):
 
 
 class PowerYeoJohnsonScalerTransformer(BaseEstimator, TransformerMixin):
+    """
+    A transformer class to scale numerical features using the Yeo-Johnson power transformation method.
+
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        List of column names to be scaled. If None, all numerical columns will be scaled.
+    preprocess_ : bool, optional (default=False)
+        Flag indicating whether this scaling is a preprocessing step of another transformer (e.g before applying PCA or clustering methods)
+    """
     def __init__(self, columns=None, preprocess_=False):
-        
         self.columns = columns        
         self.preprocess_ = preprocess_
 
@@ -515,10 +707,18 @@ class PowerYeoJohnsonScalerTransformer(BaseEstimator, TransformerMixin):
     
 
 
-
 class QuantileScalerTransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer for scaling numerical features using QuantileTransformer.
+
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        List of column names to scale. If None, all numerical columns will be scaled.
+    preprocess_ : bool, optional (default=False)
+        Flag indicating whether this scaling is a preprocessing step of another transformer (e.g before applying PCA or clustering methods)
+    """
     def __init__(self, columns=None, preprocess_=False):
-        
         self.columns = columns
         self.preprocess_ = preprocess_
 
@@ -548,8 +748,17 @@ class QuantileScalerTransformer(BaseEstimator, TransformerMixin):
     
 
 class LogScalerTransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer for applying log transformation to numerical columns.
+
+    Parameters:
+    -----------
+    columns : list or None, default=None
+        The list of columns to apply log transformation to. If None, all numerical columns are selected.
+    preprocess_ : bool, optional (default=False)
+        Flag indicating whether this scaling is a preprocessing step of another transformer (e.g before applying PCA or clustering methods)
+    """
     def __init__(self, columns=None, preprocess_=False):
-        
         self.columns = columns
         self.preprocess_ = preprocess_
 
@@ -572,11 +781,36 @@ class LogScalerTransformer(BaseEstimator, TransformerMixin):
 
     
     
-    
-
-
-
 class OperationTransformer(BaseEstimator, TransformerMixin):
+    """
+    Transformer to perform various operations on single or multiple columns of a DataFrame.
+    
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        Columns to apply operations on. If None, operations are applied to all columns.
+    
+    single_col_operation : str, optional (default='')
+        Operation to perform on a single column. Choose from ['power', 'sqrt', 'cbrt', 'exp', 'cos', 'sin', 'tan', 'log'].
+    
+    power_operator : int, optional (default=0)
+        Power to raise the column values to. Used when single_col_operation is 'power'.
+    
+    multiple_cols_method : str, optional (default='')
+        Method to perform on multiple columns. Choose from ['sum', 'substration', 'range', 'product', 'ratio', 'mean', 'median', 'variance', 'std_dev'].
+    
+    aggregation : bool, optional (default=True)
+        Whether to aggregate multiple columns.
+    
+    feature_name : str or None, optional (default=None)
+        Name for the new feature created when aggregating or combining columns.
+    
+    combinations : int, optional (default=0)
+        Number of combinations of columns to perform operations on.
+    
+    drop : bool, optional (default=False)
+        Whether to drop the original columns after transformation.
+    """
     def __init__(self, columns=None,
                        single_col_operation='', # ['power', 'square_root', 'cude_root', 'exponential', 'cos', 'sin', 'tan', 'log']
                        power_operator=int(),
@@ -620,10 +854,8 @@ class OperationTransformer(BaseEstimator, TransformerMixin):
             for combination in list(itertools.combinations(self.selected_cols, self.combinations)):
                 X = self._multiple_cols_methods(X, list(combination), 'comb')
             
-        if self.drop: X = X.drop(self.selected_cols, axis=1)
-            
+        if self.drop: X = X.drop(self.selected_cols, axis=1) 
         return X
-            
 
     def _multiple_cols_methods(self, X, cols, prefix, name=None):
 
@@ -673,7 +905,6 @@ class OperationTransformer(BaseEstimator, TransformerMixin):
 
         return X
 
-
     def _carry_out_single_col_operation(self, X, cols):
         if self.single_col_operation not in self.available_single_col_operations:
             raise ValueError(f'Unsupported single_col_operation: {self.single_col_operation}')
@@ -698,16 +929,24 @@ class OperationTransformer(BaseEstimator, TransformerMixin):
                 X[f'{col}_tan'] = np.tan(X[col])
             elif self.single_col_operation == 'log':
                 X[f'{col}_log'] = np.log1p(X[col])
-
         return X
-    
     
     
 
     
 class RoundTransformer(BaseEstimator, TransformerMixin):
+    """
+    A transformer class to round specified columns in a DataFrame.
+
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        List of column names to round. If None, all numeric columns will be rounded.
+
+    decimals : int, optional (default=2)
+        Number of decimal places to round to.
+    """
     def __init__(self, columns=None, decimals=2):
-        
         self.columns = columns
         self.decimals = decimals
         
@@ -729,30 +968,67 @@ class RoundTransformer(BaseEstimator, TransformerMixin):
 
 
 
-
-
-
-
-
-
-
-
 def _get_preprocess_transform (X, preprocess_transformer):
+    """
+    Function used by clustering and dimentionnal reduction transformer.
+    This function applies the provided preprocessing transformer to the input dataframe X
+    and returns the preprocessed dataframe along with the fitted transformer. It ensures
+    that the original indexing is retained after transformation.
+    """
+    """
+    Get the preprocessed dataframe along with the fitted transformer.
+
+    Parameters:
+        X (pandas DataFrame): The input dataframe to be preprocessed.
+        preprocess_transformer (scikit-learn Transformer): The preprocessing transformer 
+                                                           to be applied to the data.
+
+    Returns:
+        pandas DataFrame: The preprocessed dataframe containing both preprocessed 
+                          and non-preprocessed columns with original indexing.
+        preprocess_transformer: The fitted preprocessing transformer.
+
+
+    """
     # Get the full preprocessed df with preprocessed columns and non preprocessed columns
     X_preprocessed = preprocess_transformer.fit_transform(X)
     # Reassign indexing lost during transofrmation
     X_preprocessed.index = X.index
     return X_preprocessed, preprocess_transformer
 
+
+
 class KMeansClusteringTransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer for performing KMeans clustering on specified columns of a DataFrame.
+
+    Parameters:
+    -----------
+    columns : list or None, optional (default=None)
+        List of column names to perform clustering on. If None, all columns will be used.
+
+    preprocess_transformer : object or None, optional (default=None)
+        A transformer object to preprocess the data before clustering. If None, no preprocessing will be done.
+
+    preprocess_params : dict, optional (default={})
+        Parameters to be set for the preprocess transformer.
+
+    drop : bool, optional (default=False)
+        Whether to drop the selected columns after transformation.
+
+    n_clusters : int or None, optional (default=None)
+        The number of clusters to form as well as the number of centroids to generate. If None, it will be determined automatically.
+
+    random_state : int or None, optional (default=RANDOM_STATE)
+        Random state for KMeans clustering.
+    """
     def __init__(self, columns=None,
                        preprocess_transformer=None,
                        preprocess_params={},
                        drop=False,
                        n_clusters=None,
                        random_state=RANDOM_STATE
-    ):
-             
+    ):    
         self.columns = columns
         self.preprocess_transformer = preprocess_transformer() if preprocess_transformer is not None else None
         self.preprocess_params = preprocess_params if preprocess_params else {}
@@ -765,7 +1041,6 @@ class KMeansClusteringTransformer(BaseEstimator, TransformerMixin):
         self.selected_cols = [] 
         self.kmeans_model = None  # Store the fitted KMeans model
 
-    
     @get_num_cat_features_decorator
     @select_columns_decorator
     def fit(self, X, y=None):
@@ -774,7 +1049,6 @@ class KMeansClusteringTransformer(BaseEstimator, TransformerMixin):
             X_preprocessed, self.preprocess_transformer = _get_preprocess_transform(X[self.selected_cols], self.preprocess_transformer)
             # Fit the model on the preprocessed columns
             self.kmeans_model = KMeans(n_clusters=self.n_clusters, n_init=10, random_state=self.random_state).fit(X_preprocessed)
-            
         else:
             self.kmeans_model = KMeans(n_clusters=self.n_clusters, n_init=10, random_state=self.random_state).fit(X[self.selected_cols])
         return self
@@ -788,16 +1062,39 @@ class KMeansClusteringTransformer(BaseEstimator, TransformerMixin):
 
         if self.drop:
             X = X.drop(self.selected_cols, axis=1)
-            
         return pd.concat([X, new_feature], axis=1)
 
 
 
 
-
-
-
 class PCATransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer for performing Principal Component Analysis (PCA) on selected columns.
+
+    Parameters:
+    -----------
+    columns : list or None, default=None
+        List of column names to apply PCA on. If None, PCA is applied to all columns.
+        
+    preprocess_transformer : object or None, optional (default=None)
+        A transformer object to preprocess the data before appying PCA. If None, no preprocessing will be done.
+
+    preprocess_params : dict, optional (default={})
+        Parameters to be set for the preprocess transformer.
+        
+    drop : bool, default=False
+        Whether to drop the original columns after adding the PCA components.
+        
+    n_components : int or None, default=None
+        Number of principal components to retain. If None, retains all components.
+        
+    component_names : list or None, default=None
+        Names to assign to the principal components. If None, names are autogenerated.
+        
+    random_state : int, RandomState instance or None, default=RANDOM_STATE
+        Controls the randomness of the estimator.
+    """
+    
     def __init__(
         self,
         columns=None,
@@ -826,7 +1123,6 @@ class PCATransformer(BaseEstimator, TransformerMixin):
     @get_num_cat_features_decorator
     @select_columns_decorator
     def fit(self, X, y=None):
-
         if self.preprocess_transformer:
             # Get process transformer, preprocessed df and preprocessed cols
             X_preprocessed, self.preprocess_transformer = _get_preprocess_transform(X[self.selected_cols], self.preprocess_transformer)
@@ -838,7 +1134,6 @@ class PCATransformer(BaseEstimator, TransformerMixin):
         return self
      
     def transform(self, X):
-
         if self.preprocess_transformer:
             X_preprocessed = self.preprocess_transformer.transform(X[self.selected_cols])
             new_feature = self.pca_model.transform(X_preprocessed)
@@ -855,34 +1150,39 @@ class PCATransformer(BaseEstimator, TransformerMixin):
         )
 
         if self.drop:
-            X = X.drop(self.selected_cols, axis=1)
-            
+            X = X.drop(self.selected_cols, axis=1)  
         X = pd.concat([X, pca_result], axis=1)
-
         return X
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 class AgglomerativeClusteringTransformer(BaseEstimator, TransformerMixin): 
+    """
+    Custom transformer for performing Agglomerative Clustering on selected columns.
+
+    Parameters:
+    ----------
+    columns: list or None, default=None
+        List of column names to consider for clustering.
+
+    preprocess_transformer : object or None, optional (default=None)
+        A transformer object to preprocess the data before appying AggClustering. If None, no preprocessing will be done.
+
+    preprocess_params : dict, optional (default={})
+        Parameters to be set for the preprocess transformer.
+
+    drop: bool, default=False
+        Whether to drop the original columns after appending the cluster labels.
+
+    n_clusters: int or None, default=None
+        The number of clusters to form.
+    """
     def __init__(self, columns=None,
                        preprocess_transformer=None,
                        preprocess_params={},
                         drop=False, 
                         n_clusters=None):
-        
         
         self.columns = columns
         self.preprocess_transformer = preprocess_transformer() if preprocess_transformer is not None else None
@@ -894,16 +1194,13 @@ class AgglomerativeClusteringTransformer(BaseEstimator, TransformerMixin):
         
         self.selected_cols = []
         
-
     # THERE IS NO PREDICT NOR TRANSFORM METHOD FOR AGG, ONLY fit_predict
     @get_num_cat_features_decorator
     @select_columns_decorator    
     def fit(self, X, y=None):
-
         if self.preprocess_transformer:
             # Get process transformer, preprocessed df and preprocessed cols
-            _, self.preprocess_transformer = _get_preprocess_transform(X[self.selected_cols], self.preprocess_transformer)
-                    
+            _, self.preprocess_transformer = _get_preprocess_transform(X[self.selected_cols], self.preprocess_transformer)     
         return self
      
     def transform(self, X):
@@ -911,7 +1208,6 @@ class AgglomerativeClusteringTransformer(BaseEstimator, TransformerMixin):
         if self.preprocess_transformer:
             X_preprocessed = self.preprocess_transformer.transform(X[self.selected_cols])
             new_feature = model.fit_predict(X_preprocessed)
-
         else:
             new_feature = model.fit_predict(X[self.selected_cols])
 
@@ -924,23 +1220,35 @@ class AgglomerativeClusteringTransformer(BaseEstimator, TransformerMixin):
 
         if self.drop:
             X = X.drop(self.agg_cluster_cols, axis=1)
-            
         return pd.concat([X, agg_result], axis=1)
 
 
 
 
-
-
-
-
-
-
-
-
-
-
 class DBSCANClusteringTransformer(BaseEstimator, TransformerMixin):
+    """
+    Transformer to perform DBSCAN clustering and add cluster labels as a new feature.
+
+    Parameters:
+    ----------
+    columns: list or None, default=None
+        List of column names to be used for clustering. If None, all columns will be used.
+
+    preprocess_transformer : object or None, optional (default=None)
+        A transformer object to preprocess the data before appying DBSCAN. If None, no preprocessing will be done.
+
+    preprocess_params : dict, optional (default={})
+        Parameters to be set for the preprocess transformer.
+
+    drop: bool, default=False
+        If True, drops the selected columns after clustering.
+
+    min_samples: int or None, default=None
+        The number of samples in a neighborhood for a point to be considered as a core point.
+
+    eps: float or None, default=None
+        The maximum distance between two samples for one to be considered as in the neighborhood of the other.
+    """
     def __init__(
         self,
         columns=None,
@@ -950,7 +1258,6 @@ class DBSCANClusteringTransformer(BaseEstimator, TransformerMixin):
         min_samples=None,
         eps=None,
     ):
-        
         self.columns = columns
         self.preprocess_transformer = preprocess_transformer() if preprocess_transformer is not None else None
         self.preprocess_params = preprocess_params if preprocess_params else {}
@@ -962,15 +1269,13 @@ class DBSCANClusteringTransformer(BaseEstimator, TransformerMixin):
         
         self.selected_cols = []
             
-        
     # THERE IS NO PREDICT NOR TRANSFORM METHOD FOR DBscan, ONLY fit_predict
     @get_num_cat_features_decorator
     @select_columns_decorator 
     def fit(self, X, y=None):
         if self.preprocess_transformer:
             # Get process transformer, preprocessed df and preprocessed cols
-            _, self.preprocess_transformer = _get_preprocess_transform(X[self.selected_cols], self.preprocess_transformer)
-              
+            _, self.preprocess_transformer = _get_preprocess_transform(X[self.selected_cols], self.preprocess_transformer) 
         return self
      
     def transform(self, X):
@@ -982,7 +1287,6 @@ class DBSCANClusteringTransformer(BaseEstimator, TransformerMixin):
             new_feature = pd.DataFrame(model.fit_predict(X[self.selected_cols]), columns=['dbscan_cluster'], index=X.index)
 
         if self.drop:
-            X = X.drop(self.selected_cols, axis=1)
-            
+            X = X.drop(self.selected_cols, axis=1) 
         return pd.concat([X, new_feature], axis=1)
 
