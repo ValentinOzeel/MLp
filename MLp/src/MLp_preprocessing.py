@@ -24,22 +24,48 @@ def get_cpu_count():
     except Exception as e:
         print(f"Error while determining CPU count: {e}")
         return None
-
-
-# Set the number of cores you want to use
-# Enables to silences warning by KMeans :
-# UserWarning: Could not find the number of physical cores for the following reason: found 0 physical cores < 1
-# Returning the number of logical cores instead. You can silence this warning by setting LOKY_MAX_CPU_COUNT to the number of cores you want to use.
-#  warnings.warn( File "C:\Users\V.ozeel\AppData\Local\Programs\Python\Python310\lib\site-packages\joblib\externals\loky\backend\context.py", line 282, in _count_physical_cores raise ValueError(f"found {cpu_count_physical} physical cores < 1")
+    
 os.environ["OMP_NUM_THREADS"] = str(get_cpu_count())
 
 
 ############################## PREPROCESSING TRANSFORMERS ##############################
 ############################## PREPROCESSING TRANSFORMERS ##############################
 
-
-
 class DynamicFeatureTransformer(BaseEstimator, TransformerMixin):
+    """
+    Custom transformer class that aims at adding flexibility to a given sklearn transformer. 
+    It applies the transformer to selected columns of a DataFrame, enables preprocessing before transformation 
+    and add the new feature while optionally removing initial features (add add prefix or rename transformed features).
+
+    Parameters:
+    -----------
+    transformer : object
+        The transformer to apply to the selected columns.
+    _preprocess_transformer : object, optional, default=None
+        Preprocess transformer to apply before applying the main transformer.
+    _preprocess_params : dict, optional, default={}
+        Parameters for the preprocess transformer.
+    _columns : list or array-like, optional, default=None
+        List of columns to apply the transformer on. If None, applies to all columns.
+    _drop : bool, optional, default=False
+        Whether to drop the selected columns after transformation.
+    _col_name_prefix : str, optional, default=None
+        Prefix to use for column names of the transformed features.
+    _col_names : list of str, optional, default=None
+        List of names for the transformed features. Overrides _col_name_prefix.
+    **kwargs : dict
+        All keyword arguments to pass to the transformer initialization.
+
+    Attributes:
+    selected_cols : list
+        List of columns selected for transformation.
+
+    Methods:
+    fit(X, y=None)
+        Fit the transformer on the input data.
+    transform(X)
+        Transform the input data using the fitted transformer.
+    """
     def __init__(self, transformer,
                  _preprocess_transformer=None,
                  _preprocess_params={},
@@ -47,7 +73,6 @@ class DynamicFeatureTransformer(BaseEstimator, TransformerMixin):
                  _col_name_prefix=None, _col_names=None,
                  **kwargs
                  ):
-        
         
         self.transformer = transformer(**kwargs)
          
@@ -62,6 +87,7 @@ class DynamicFeatureTransformer(BaseEstimator, TransformerMixin):
         
         self.selected_cols = []
 
+    # Decorator to select the columns to apply the transformer on
     @get_num_cat_features_decorator
     @select_columns_decorator
     def fit(self, X, y=None):
@@ -77,7 +103,6 @@ class DynamicFeatureTransformer(BaseEstimator, TransformerMixin):
     def transform(self, X):
         self._validate_parameters()
         
-
         if self._preprocess_transformer:
             X_preprocessed = pd.DataFrame(self._preprocess_transformer.transform(X[self.selected_cols]), index=X.index)
             new_df = pd.DataFrame(self.transformer.transform(X_preprocessed), index=X.index)
@@ -111,10 +136,23 @@ class DynamicFeatureTransformer(BaseEstimator, TransformerMixin):
             return self.selected_cols
         
         
-    
-
-
 class FunctionTransformerTransformer(BaseEstimator, TransformerMixin):
+    """
+    A custom transformer that applies a function transformer to specific columns of a DataFrame.
+    
+    Parameters:
+    -----------
+    function_transformer : function
+        The function transformer to be applied to the selected columns.
+    
+    columns : list or None, optional (default=None)
+        The list of column names to apply the function transformer to. If None, the function transformer 
+        will be applied to all columns.
+    
+    drop : bool or list, optional (default=False)
+        Whether to drop the original columns after transformation. If True, drops the transformed columns.
+        If a list is provided, drops the specified columns after transformation.
+    """
     def __init__(self, 
                  function_transformer,
                  columns=None,
@@ -125,14 +163,14 @@ class FunctionTransformerTransformer(BaseEstimator, TransformerMixin):
         self.drop = drop
 
         self.selected_cols = []
-        
+
+    # Decorator to select the columns to apply the transformer on
     @get_num_cat_features_decorator
     @select_columns_decorator
     def fit(self, X, y=None):
         return self
 
     def transform(self, X):
-        
         result_function_transformer = self.function_transformer(X[self.selected_cols])
         
         if self.drop:
@@ -149,6 +187,9 @@ class FunctionTransformerTransformer(BaseEstimator, TransformerMixin):
    
 
 class MLpPreprocessing:
+    '''
+    This class provides a structured and modular approach to data preprocessing, allowing users to define and apply preprocessing pipelines efficiently.
+    '''
     def __init__(self):
         # Created pipelines
         self.data_pipelines_ = []
@@ -269,7 +310,6 @@ class MLpPreprocessing:
             self.data_pipelines_.append((name, created_pipeline))
             return
     
-        
         # If pipeline if provided, assign it as attribute            
         if pipeline is not None and pipeline:
             _actualize_attributes(pipeline)
@@ -282,10 +322,13 @@ class MLpPreprocessing:
             _actualize_attributes(new_pipeline)   
             
         return new_pipeline
-
-
+    
 
     def remove_dropped_index_in_y(self, X, y):
+        '''
+        Method that removes rows in y (target variable) corresponding to the indices not present in X (features).
+        It basically enables to run sampling preprocessing inside our pipeline. (e.g outlier removal)
+        '''
         y = y.loc[X.index]
         return y 
         
@@ -313,59 +356,12 @@ class MLpPreprocessing:
             return run_preprocessing(pipeline, to_transform=X_transform)
 
 
-#
-#        
-#
-#    def apply_data_pipeline(self, pipeline_tuple, X_fit_tr=None, X_transform=None, y_fit_tr=None, y_transform=None):
-#        def run_preprocessing(pipeline, to_fit_transform=None, to_transform=None):
-#            if pipeline is None: raise ValueError('Args[0] "pipeline" must not be None.')
-#
-#            if to_fit_transform is not None:
-#                return pipeline.fit_transform(to_fit_transform)
-#            elif to_transform is not None:
-#                return pipeline.transform(to_transform)
-#
-#        def remove_dropped_index_in_y(X, y):
-#            y = y.loc[X.index]
-#            return X, y  
-#
-#
-#        pipeline_name, pipeline = pipeline_tuple
-#
-#        if all(df is not None for df in [X_fit_tr, X_transform, y_fit_tr, y_transform]):
-#            X_fit_tr = run_preprocessing(pipeline, to_fit_transform=X_fit_tr)
-#            X_transform = run_preprocessing(pipeline, to_transform=X_transform)
-#            
-#           # if 'sampling' in pipeline_name:
-#           #     X_fit_tr, y_fit_tr = remove_dropped_index_in_y(X_fit_tr, y_fit_tr)
-#           #     X_transform, y_transform = remove_dropped_index_in_y(X_transform, y_transform)   
-#                
-#            return X_fit_tr, X_transform, y_fit_tr, y_transform         
-#                
-#                    
-#        elif (X_fit_tr is not None) and (y_fit_tr is not None):
-#            X_fit_tr = run_preprocessing(pipeline, to_fit_transform=X_fit_tr)
-#            
-#          #  if 'sampling' in pipeline_name: 
-#          #      X_fit_tr, y_fit_tr = remove_dropped_index_in_y(X_fit_tr, y_fit_tr)
-#                
-#            return X_fit_tr, y_fit_tr
-#                    
-#        elif X_transform is not None:
-#            X_transform = run_preprocessing(pipeline, to_transform=X_transform)
-#            
-#         #   if (y_transform is not None) and ('sampling' in pipeline_name):
-#         #       X_transform, y_transform = remove_dropped_index_in_y(X_transform, y_transform)
-#
-#            return (X_transform, y_transform) if y_transform is not None else X_transform
-#
-
 
 
 class MLpPlaygroundPreprocessing():
-    def __init__(self, X_copy=None, y_copy=None):
+    def __init__(self, X_copy, y_copy):
         """
-        Initializes the PlaygroundPreprocess instance. Aimed at helping trying different sampling and preprocessing strategies.
+        Initializes the MLpPlaygroundPreprocessing instance. Aimed at helping trying different sampling and preprocessing strategies.
         Parameters (both are mandatory):
         - initial_X_copy: Initial X df copy.
         - y_copy: Copy of the target variable.
@@ -428,22 +424,18 @@ class MLpPlaygroundPreprocessing():
         else:
             raise ValueError('Please provide the parameters "name" and either "steps" or "pipeline".')
             
-        # Apply the transformation based on the specified 'type'
-        if 'sampling' in name:
-            self.X_pg = my_pipeline.fit_transform(self.X_pg)
-            self.y_pg = self.y_pg.loc[self.X_pg.index]
-            _update_attributes(my_pipeline)
-        else:
-            self.X_pg = my_pipeline.fit_transform(self.X_pg)
-            _update_attributes(my_pipeline)
-        return self.X_pg
+        # Apply the transformation
+        self.X_pg = my_pipeline.fit_transform(self.X_pg)
+        self.y_pg = self.y_pg.loc[self.X_pg.index]
+        _update_attributes(my_pipeline)
+        return self.X_pg, self.y_pg
     
     
-    def delete_previous_transformations(self, n_steps=int()):
+    def delete_previous_transformations(self, n_steps:int):
         """
-        Delete previous transformation steps.
+        Delete previous transformation steps performed.
         Parameters:
-        - n_steps: Number of steps to delete.
+        - n_steps: Number of steps to delete (from the last transformation step).
         """
         if n_steps :
             # Remove n_steps to count and select remaining in list_pipeline_pg, all_X_y_pg
@@ -456,7 +448,6 @@ class MLpPlaygroundPreprocessing():
             else:
                 self.X_pg, self.y_pg = self.X_copy, self.y_copy
         else:
-            raise ValueError('Need n_steps parameter (int()) to delete previous steps.')
-            
-        return 
+            raise ValueError('Need n_steps parameter (int()) to delete previous steps.')    
+        return self.y_pg
     

@@ -1,16 +1,19 @@
 import os
-import sys
+import numpy as np
+from joblib import Parallel, delayed, dump
 from typing import Dict, Tuple, List
+from colorama import Fore, Style, init
+# Initialize colorama to work on Windows as well
+init(autoreset=True)
 
-import setuptools 
-import distutils
-
+from MLp.src.MLp_preprocessing import MLpPreprocessing
+from MLp.src.MLp_model import MLpModel
+import MLp.src.secondary_modules.validate_args_kwargs as valid_mlp
 from MLp.conf.config_functions import get_config
 mlp_config = get_config()
 RANDOM_STATE = mlp_config['MLP_CONFIG']['RANDOM_STATE']
-
-
 from MLp.src.secondary_modules.import_libraries import import_cpu_gpu_sklearn, import_cpu_gpu_pandas
+
 pd = import_cpu_gpu_pandas()
 train_test_split, cross_val_score, KFold, StratifiedKFold, GridSearchCV = import_cpu_gpu_sklearn('model_selection', ['train_test_split', 
                                                                                                                      'cross_val_score', 
@@ -21,29 +24,18 @@ Pipeline = import_cpu_gpu_sklearn('pipeline', 'Pipeline')
 ParameterGrid = import_cpu_gpu_sklearn('model_selection', 'ParameterGrid')
 BaseEstimator = import_cpu_gpu_sklearn('base', 'BaseEstimator')
 
-from MLp.src.MLp_preprocessing import MLpPreprocessing
-from MLp.src.MLp_model import MLpModel
-import MLp.src.secondary_modules.validate_args_kwargs as valid_mlp
-
-import numpy as np
-
 import optuna
 # override Optuna's default logging to ERROR only
 optuna.logging.set_verbosity(optuna.logging.ERROR)
-
 
 import mlflow
 mlflow.set_tracking_uri(mlp_config['MLFLOW_CONFIG']['TRACKING_URI'])
 from MLp.src.secondary_modules.mlflow_functions import get_or_create_mlflow_experiment
 from mlflow.models import infer_signature
 
-from joblib import Parallel, delayed, dump
 
-from colorama import Fore, Style, init
-# Initialize colorama to work on Windows as well
-init(autoreset=True)
 
-# Class to create and run flexible model pipelines
+# Class to create and run flexible data preprocessing and model training pipelines
 class MLpBuilder(MLpPreprocessing, MLpModel):
     def __init__(self, *args, **kwargs):
         self.is_y_continoous = False
@@ -207,13 +199,33 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
             return None, None
     
 
-
-     
     def run_pipeline(self, scoring, 
                      X=None, y=None,
                      test_size=0.2, n_splits=None, kf=None, n_jobs_cv=-1, 
                      use_mlflow=False, run_name=None, use_mlflow_cv=None, run_name_cv=None):
         
+        """
+        Execute a machine learning pipeline including data preprocessing, model training, and evaluation.
+
+        Parameters:
+            - scoring (str): The scoring metric used for model evaluation.
+            - X (df, optionnal, default=None): Run pipeline with X, rather than self.X
+            - y (df, optionnal, default=None): Run pipeline with y, rather than self.y
+            - test_size (float, default=0.2): The proportion of the dataset to include in the test split.
+            - n_splits (int, default=None): Number of folds in cross-validation (KFold/StratifiedKFold).
+            - kf (KFold, default=None): Predefined cross-validation splitter. If provided, n_splits is ignored.
+            - n_jobs_cv (int, default=-1): Number of CPU cores to use for cross-validation.
+            - use_mlflow (bool, default=False): Whether to use MLflow for experiment tracking.
+            - run_name (str, default=None): Name of the MLflow run.
+            - use_mlflow_cv (bool, default=None): Whether to use MLflow for cross-validation.
+            - run_name_cv (str, default=None): Name of the MLflow run for cross-validation.
+
+        Returns:
+            If use_mlflow is True, returns None. Otherwise, returns a tuple containing train_score, test_score, signature, and an example of preprocessed training data.
+
+        Note:
+            This function executes a machine learning pipeline, including data preprocessing, model training, and evaluation. If use_mlflow is True, it tracks the experiment using MLflow.
+        """
         def core_run_pipeline():
             # Separate data into training and validation sets
             X_train, X_test, y_train, y_test = self._split_data(X, y, test_size)
@@ -223,6 +235,7 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
             
             for (name, pipeline) in self.data_pipelines_:
                 X_train_p, X_test_p = self.apply_data_pipeline((name, pipeline), X_fit_tr=X_train, X_transform=X_test)
+            # To handle sampling transformation (e.g outlier removal)
             y_train_p = self.remove_dropped_index_in_y(X_train_p, y_train)
             y_test_p = self.remove_dropped_index_in_y(X_test_p, y_test)
 
@@ -284,25 +297,25 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
         return 
 
 
-
-
-
-
-
-                
-                
-                
-                
-                
-                
-                
-                
-                
-                
-
     # Method that runs the preprocessing pipeline and fit the model with a crossvalidation approach
     def _run_cross_validation(self, X, y, kf, scoring, n_jobs=-1, use_mlflow=False, run_name=None, verbose=True):
-        
+        """
+        Run cross-validation for the model training.
+
+        Parameters:
+            X (DataFrame): Input features.
+            y (Series): Target variable.
+            kf (KFold or StratifiedKFold): Cross-validation splitter.
+            scoring (str): Scoring metric for evaluation.
+            n_jobs (int): Number of parallel jobs for cross-validation.
+            use_mlflow (bool): Flag indicating whether to use MLflow for experiment tracking.
+            run_name (str): Name of the MLflow run.
+            verbose (bool): Flag indicating whether to print progress messages.
+
+        Returns:
+            list: Test scores for each fold.
+        """
+
         # Nested function to fit and predict on a single fold
         def _cv_train_and_predict(counter, train_index, test_index, X_cv, y_cv, scoring):
             def _core_cv_train_and_predict():
@@ -369,13 +382,14 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
     
     
     
-    
-    
-
-
-
 
     def _get_hyperparameters(self):
+        """
+        Retrieve hyperparameters from data pipelines and the model.
+
+        Returns:
+            dict: A dictionary containing hyperparameters.
+        """
         my_hyperparams = {}
         for pipeline_name, pipeline in self.data_pipelines_:
             pipeline_params = pipeline.get_params()
@@ -384,13 +398,18 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
         return my_hyperparams
 
 
-
-
-
-
-
-
     def best_hyperparams_fit(self, scoring, train_size, verbose=True):
+        """
+        Refits created pipelines and the model with the best hyperparameters for a given scoring metric and train size.
+
+        Parameters:
+        - scoring: str, the scoring metric used to determine the best hyperparameters.
+        - train_size: str, the size of the training set used to determine the best hyperparameters.
+        - verbose: bool, whether to print verbose output (default is True).
+
+        Returns:
+        - None
+        """
         best_hyperparams = self.best_hyperparameters[scoring][train_size]["best_params_separate_objet"]
         
         if verbose: print(f'{Fore.GREEN}Running best_hyperparams_fit...\n{Fore.WHITE}Refit all created pipelines and the model on:')
@@ -401,7 +420,6 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
         
         self.model_.set_params(**best_hyperparams[self.model_name_])
         if verbose: print(f'{Fore.GREEN}{self.model_name_}: {Fore.BLUE}{best_hyperparams[self.model_name_]}')
-        
         return
 
 
@@ -412,6 +430,26 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
                                  use_mlflow=False, run_name=None, 
                                  verbose=True):
 
+        """
+        Perform hyperparameter tuning using grid search technique.
+    
+        Parameters:
+            param_grid (Dict): A dictionary specifying the hyperparameters to be tuned.
+            scoring (str): The scoring metric to be used for evaluating the models.
+            X (df, optional): Feature dataset. Defaults to None (self.X used).
+            y (df, optional): Target labels. Defaults to None (self.y used).
+            kf (object): Object representing the cross-validation strategy. Defaults to None. Overwritte n_split if provided.
+            n_splits (int): Number of splits in cross-validation. Defaults to 5.
+            cv_n_jobs (int): Number of jobs to run in parallel for cross-validation. Defaults to -1.
+            use_mlflow (bool): Flag indicating whether to use MLflow for experiment tracking. Defaults to False.
+            run_name (str): Name of the MLflow experiment run. Defaults to None.
+            verbose (bool): Flag indicating whether to print progress messages. Defaults to True.
+    
+        Returns:
+            Tuple: A tuple containing the best hyperparameters found, the corresponding cross-validated score, 
+                   and the standard deviation of the cross-validated scores.
+        """
+         
 
         def _update_pipelines_or_model_hyperparameters():
             """
@@ -440,8 +478,6 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
             else:
                 return b_params, b_cv_score, b_score_std
     
-
-        
         kf, n_splits = self._define_kf(kfold=kf, n_splits=n_splits) 
         
         X_data, y_data = (self.X, self.y) if X is None and y is None else (X, y)
@@ -490,25 +526,40 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
 
 
 
-
-
-
-
-
-
-
-
-
     @valid_mlp.validate_optuna
     def optuna_tuning(self, optuna_hyperparameters: List, n_trials: int, scoring: str, 
                              direction='maximize', custom_objective=None,
                              X=None, y=None, n_splits=None, kf=None, cv_n_jobs=-1,
                              use_mlflow=False, run_name=False,
                              verbose=True):
-        
+        """
+        Perform hyperparameter tuning using Optuna.
+
+        Args:
+            optuna_hyperparameters (List): List of tuples specifying hyperparameters to optimize.
+                                           Each tuple should contain (param_name, param_type, param_range, param_options).
+            n_trials (int): Number of trials for hyperparameter optimization.
+            scoring (str): Scoring metric to optimize.
+            direction (str, optional): Direction to optimize ('maximize' or 'minimize'). Default is 'maximize'.
+            custom_objective (function, optional): Custom objective function for optimization. Default is None.
+            X (df, optional): Feature dataset. Defaults to None (self.X used).
+            y (df, optional): Target labels. Defaults to None (self.y used).
+            n_splits (int, optional): Number of splits for cross-validation. Default is None.
+            kf (str or object, optional): Cross-validation strategy. Default is None.
+            cv_n_jobs (int, optional): Number of jobs for cross-validation. Default is -1.
+            use_mlflow (bool, optional): Flag to enable MLflow logging. Default is False.
+            run_name (str, optional): Name for the MLflow run. Default is False.
+            verbose (bool, optional): Flag to display progress messages. Default is True.
+
+        Returns:
+            Tuple: Best hyperparameters, best cross-validation score, and standard deviation of the score.
+        """
         def objective(trial):
+            #Objective function for Optuna optimization.
             def _core_objective():
+                #Core objective function to set hyperparameters and calculate cross-validation score.
                 def _create_optuna_dict():
+                    #Create dictionary of hyperparameters to optimize.
                     optuna_dict = {name: [] for name, _ in self.data_pipelines_}
                     optuna_dict[self.model_name_] = []
 
@@ -521,6 +572,7 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
                     return optuna_dict
 
                 def _set_pipeline_params(name, pipeline_or_model, params, trial) -> Dict:
+                    #Set hyperparameters for a pipeline/model.
                     parameters = {}
                     for param_name, param_type, param_range, param_options in params:
                         trial_value = getattr(trial, param_type)(''.join([name, '__', param_name]), *param_range, **param_options)
@@ -632,38 +684,6 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
         
     def make_hyperparameters_dict_with_separated_objects(self, hyperparameters):
         hyperparameter_dict = {name: {} for name, _ in self.data_pipelines_}
@@ -727,12 +747,6 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
 
 
 
-
-
-    
-
-
-
     # Method that enables to train the assembled model on all our data
     def train_on_all_data(self, X=None, y=None, 
                           get_pipelines_model=True, verbose=None, 
@@ -760,9 +774,7 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
             print(f'{Fore.RED}The pipelines and model have been fitted on X.')
             return X, y if use_mlflow else None
         
-        
         if verbose: print(f'\n{Fore.MAGENTA}{"~"*10}\n{Fore.GREEN}Running train_on_all_data...')  
-        
         
         if use_mlflow:
             # MLflow-related code
@@ -786,9 +798,6 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
             core_train_on_all_data(X, y)                 
                 
         return (self.data_pipelines_, (self.model_name_, self.model_)) if get_pipelines_model else None
-
-
-
 
 
 
@@ -823,51 +832,17 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
         return
 
 
-
-
-
-
-    
-    
     def feature_importance(self, method, X=None, y=None, scoring=''):
-        
         print(' ------------------', '\n', 'Computing features importance', '\n', '------------------')
-        
         X, y = (self.X, self.y) if X is None and y is None else (X, y)
         
         for (name, pipeline) in self.data_pipelines_:
             X = self.apply_data_pipeline((name, pipeline), X_fit_tr=X)
         y = self.remove_dropped_index_in_y(X, y)
         
-        
         self.model_.fit(X, y)
         self.check_feature_importance(method=method, scoring=scoring, X=X, y=y)
         return
-    
-
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-
-        
-
-
     
 
     # Method that enables to use the assembled model to make real life predictions on unseen data 

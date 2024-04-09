@@ -1,11 +1,8 @@
 from MLp.conf.config_functions import get_config
 mlp_config = get_config()
 RANDOM_STATE = mlp_config['MLP_CONFIG']['RANDOM_STATE']
-
-import numpy as np
-
-
 from MLp.src.secondary_modules.import_libraries import import_cpu_gpu_sklearn, import_cpu_gpu_pandas
+
 pd = import_cpu_gpu_pandas()
 # Scoring metrics for Classifier  
 accuracy_score, log_loss, precision_score, recall_score, f1_score = import_cpu_gpu_sklearn('metrics', ['accuracy_score', 
@@ -25,15 +22,12 @@ mutual_info_regression, mutual_info_classif = import_cpu_gpu_sklearn('feature_se
 CalibratedClassifierCV = import_cpu_gpu_sklearn('calibration', 'CalibratedClassifierCV')
 # Import clone
 clone = import_cpu_gpu_sklearn('base', 'clone')
+
+import numpy as np
 import shap
 import matplotlib.pyplot as plt
 import seaborn as sns
-       
-       
-       
-
-       
-       
+         
        
 class MLpModel():
     def __init__(self, *args, **kwargs):    
@@ -65,6 +59,7 @@ class MLpModel():
         Method that defines and potentially calibrates self.model_.
         Parameters:
         - use_model: Model class to use.
+        - model_name: Name of the model
         - calibration: Calibration method ('platt_scaling' or 'isotonic_regression') if calibration is needed.
         - calib_cv: Number of cross-validation folds for calibration.
         """
@@ -90,8 +85,6 @@ class MLpModel():
             _apply_calibration(calibration=calibration, cv=calib_cv)
             
         return self.model_
-
-
 
 
     def evaluate_model_get_score(self, scoring_metric, y_test, predictions):

@@ -11,8 +11,8 @@ PANDAS_GPU = mlp_config['MLP_CONFIG']['PANDAS_GPU']
 
 def import_cpu_gpu_sklearn(sub_module, import_class):
     ''' 
-    Flexible import mechanism that tries to import a specified module or class from either 'sklearn', 'sklearnex' or 'cuml'
-    based on the SKLEARN_CPU, SKLEARN_CPU_INTELEX_ACCEL, SKLEARN_GPU_RAPIDS flags. If import is not available (e.g algos not avaialble in sklearnex for instance),
+    Flexible import function that tries to import a specified module or class from either 'sklearn', 'sklearnex' or 'cuml'
+    based on the SKLEARN_CPU, SKLEARN_CPU_INTELEX_ACCEL, SKLEARN_GPU_RAPIDS config flags. If import is not available (e.g function not available in sklearnex for instance),
     then we fall back to classical sklearn import.
     
         Parameters:
@@ -58,14 +58,19 @@ def import_cpu_gpu_sklearn(sub_module, import_class):
 
 
 def import_cpu_gpu_pandas():
+    '''
+    Import classical pandas or GPU accelerated cudf as pd
+    '''
     if PANDAS_GPU:
-#        import cudf as pd
-        print('Should import cudf\n')
+        import cudf as pd
     else:
         import pandas as pd
     return pd
 
 
 def sklearnex_patch():
+    '''
+    Full sklearnex patch code
+    '''
     from sklearnex import patch_sklearn
     return patch_sklearn

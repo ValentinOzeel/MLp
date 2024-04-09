@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "MLp"
+requires-python = ">=3.10"
 dynamic = [ "dependencies", "version"]
 
 [tool.setuptools.dynamic.dependencies]
