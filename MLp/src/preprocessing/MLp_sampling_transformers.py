@@ -1,6 +1,5 @@
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
-from typing import Float
 
 from MLp.conf.config_functions import get_config
 mlp_config = get_config()
@@ -82,8 +81,8 @@ class IQROutliersTransformer(BaseEstimator, TransformerMixin):
         for col in self.selected_cols:
             data_column = X[col]
             # Calculate the first and third quartiles (Q1 and Q3)
-            Q1 = np.percentile(data_column, 25)
-            Q3 = np.percentile(data_column, 75)
+            Q1 = np.nanpercentile(data_column, 25)
+            Q3 = np.nanpercentile(data_column, 75)
             # Calculate the IQR (Interquartile Range)
             IQR = Q3 - Q1
             # Define the lower and upper bounds for outliers
@@ -104,7 +103,7 @@ class IQROutliersTransformer(BaseEstimator, TransformerMixin):
             outliers = (data_column < self.lower_bounds_[col]) | (data_column > self.upper_bounds_[col])
             # Update the total outlier mask
             total_outliers_mask |= outliers
-              
+            
         # Return the DataFrame without outliers
         return X[~total_outliers_mask]
         
@@ -178,8 +177,8 @@ class TruncationTransformer(BaseEstimator, TransformerMixin):
         columns will be considered for truncation.
     """
     
-    def __init__(self, low_threshold:Float, 
-                       high_threshold:Float,
+    def __init__(self, low_threshold:float, 
+                       high_threshold:float,
                        columns=None,
                        ):
 

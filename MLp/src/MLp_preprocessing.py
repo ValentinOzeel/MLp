@@ -231,7 +231,6 @@ class MLpPreprocessing:
                 if step_name not in unique_names:
                     unique_names.add(step_name)
                     step = (step_name,) + step[1:]
-                    print(step_name)
                     return step, unique_names
                 else:
                     count = 2
@@ -241,7 +240,6 @@ class MLpPreprocessing:
                         modified_step_name = _generate_modified_step(step_name, count)
                     modified_name_step = (modified_step_name,) + step[1:]
                     unique_names.add(modified_step_name) 
-                    print(modified_step_name) 
                     return modified_name_step, unique_names
                 
                 
@@ -412,9 +410,9 @@ class MLpPlaygroundPreprocessing():
             return
         
         # If X_pg is None, use the initial X df
-        if self.X_pg is None :
-            self.X_pg = self.X_copy
-            self.y_pg = self.y_copy
+        if self.X_pg is None:
+            self.X_pg = self.X_copy.copy()
+            self.y_pg = self.y_copy.copy()
             
         #  Create a 'type' pipeline based on provided 'steps' or 'pipeline'
         if steps:
@@ -449,5 +447,5 @@ class MLpPlaygroundPreprocessing():
                 self.X_pg, self.y_pg = self.X_copy, self.y_copy
         else:
             raise ValueError('Need n_steps parameter (int()) to delete previous steps.')    
-        return self.y_pg
+        return self.X_pg, self.y_pg
     
