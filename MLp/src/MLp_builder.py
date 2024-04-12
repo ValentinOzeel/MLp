@@ -235,12 +235,10 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
             
             for (name, pipeline) in self.data_pipelines_:
                 X_train, X_test = self.apply_data_pipeline((name, pipeline), X_fit_tr=X_train, X_transform=X_test)
-                print(name, '\n', X_train)
+
             # To handle sampling transformation (e.g outlier removal)
             y_train = self.remove_dropped_index_in_y(X_train, y_train)
             y_test = self.remove_dropped_index_in_y(X_test, y_test)
-            
-            
 
             print(f'\n{Fore.MAGENTA}{"~"*10}\n{Fore.GREEN}Training on X_train data...')
             # Fit the pipeline on the training data
