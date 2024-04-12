@@ -234,26 +234,29 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
                 _ = self._run_cross_validation(X_train, y_train, kf, scoring, n_jobs=n_jobs_cv, use_mlflow=use_mlflow_cv, run_name=run_name_cv)
             
             for (name, pipeline) in self.data_pipelines_:
-                X_train_p, X_test_p = self.apply_data_pipeline((name, pipeline), X_fit_tr=X_train, X_transform=X_test)
+                X_train, X_test = self.apply_data_pipeline((name, pipeline), X_fit_tr=X_train, X_transform=X_test)
+                print(name, '\n', X_train)
             # To handle sampling transformation (e.g outlier removal)
-            y_train_p = self.remove_dropped_index_in_y(X_train_p, y_train)
-            y_test_p = self.remove_dropped_index_in_y(X_test_p, y_test)
+            y_train = self.remove_dropped_index_in_y(X_train, y_train)
+            y_test = self.remove_dropped_index_in_y(X_test, y_test)
+            
+            
 
             print(f'\n{Fore.MAGENTA}{"~"*10}\n{Fore.GREEN}Training on X_train data...')
             # Fit the pipeline on the training data
-            self.model_.fit(X_train_p, y_train_p) 
+            self.model_.fit(X_train, y_train) 
             # Make predictions on the test data
-            predictions = self.model_.predict(X_test_p)
+            predictions = self.model_.predict(X_test)
             # Get the scores
-            train_score = self.model_.score(X_train_p, y_train_p)
-            test_score = self.evaluate_model_get_score(scoring, y_test_p, predictions)
+            train_score = self.model_.score(X_train, y_train)
+            test_score = self.evaluate_model_get_score(scoring, y_test, predictions)
             
-            signature = infer_signature(X_train_p, predictions)
+            signature = infer_signature(X_train, predictions)
             
             print(f"Performance on train data: {Fore.GREEN}{scoring} {Fore.WHITE}= {Fore.RED}{train_score}")
             print(f"Performance on test data: {Fore.GREEN}{scoring} {Fore.WHITE}= {Fore.RED}{test_score}") 
             
-            return (train_score, test_score, signature, X_train_p.head()) if use_mlflow else (train_score, test_score)
+            return (train_score, test_score, signature, X_train.head()) if use_mlflow else (train_score, test_score)
 
 
         X, y = (self.X, self.y) if X is None and y is None else (X, y)
@@ -271,7 +274,7 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
             experiment_id = get_or_create_mlflow_experiment(run_name)
             mlflow.set_experiment(experiment_id=experiment_id)
             with mlflow.start_run(experiment_id=experiment_id, run_name=run_name):
-                train_score, test_score, signature, X_train_p_exemple = core_run_pipeline()
+                train_score, test_score, signature, X_train_exemple = core_run_pipeline()
 
                 for name_pipeline, pipeline in self.data_pipelines_:
                     mlflow.sklearn.log_model(pipeline, name_pipeline)
@@ -279,11 +282,11 @@ class MLpBuilder(MLpPreprocessing, MLpModel):
                 
                 from sklearn.base import BaseEstimator
                 if isinstance(self.model_, BaseEstimator):
-                    mlflow.sklearn.log_model(self.model_, self.model_name_, signature=signature, input_example=X_train_p_exemple)
+                    mlflow.sklearn.log_model(self.model_, self.model_name_, signature=signature, input_example=X_train_exemple)
                 else:
                     from MLp.src.secondary_modules.mlflow_functions import CustomModelForMlflow
                     mlflow.pyfunc.log_model(artifact_path="model", python_model=CustomModelForMlflow(self.model_, self.data_pipelines_, self.apply_created_data_pipelines), 
-                                            signature=signature, input_example=X_train_p_exemple)
+                                            signature=signature, input_example=X_train_exemple)
 
                 mlflow.log_params(self._get_hyperparameters())
                 mlflow.log_metrics({''.join([scoring, '_', 'test_score']): np.mean(test_score),
