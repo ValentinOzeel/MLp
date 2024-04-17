@@ -2,7 +2,7 @@
 # MLp
 
 # ignore .egg
-MLp.egg-info/**
+MLp.egg-info
 
 # ignore __pycache__ folders
 __pycache__/
