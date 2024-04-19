@@ -26,3 +26,6 @@ dependencies= [
 'seaborn == 0.13.2',
 'shap == 0.44.1',
 ]
+
+[tool.setuptools.package-data]
+"*" = ["*.yml"]
