@@ -3,8 +3,7 @@ This repository aims at creating a modular and expendable playground for buildin
 MODULAR, EASY, QUICK AND REPRODUCIBLE DATA PREPROCESSING (Based on sklearn), MODEL BUILDING, FINETUNING AND TRAINING/INFERENCE PIPELINES.
 Local install:
 - activate your environment 
-- run 'pip install poetry-core==1.9.0'
-- run 'pip install -e your\MLp\path'
+- run 'pip install git+https://github.com/ValentinOzeel/MLp.git@main#egg=MLp'
 
 
 MLP_preprocessing: 
